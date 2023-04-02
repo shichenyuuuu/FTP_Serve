@@ -43,12 +43,13 @@ def upload_emit(myWin):
 
         ftp_client.uploadFile(myWin.s, srcfile, str(item.text(0)), pb)
 
-        myWin.remotrRefresh_sig.emit(1)
+        myWin.remotrRefresh_sig.emit(1)  # 更新
     except Exception as e:
         # message = QMessageBox.information(self,'无权限','对不起，您没有此操作的权限')
         put_text('对不起，您没有此操作的权限。错误原因：{}'.format(str(e)), color="red")
 
 
+# 下载文件
 def download_emit(myWin):
     try:
         pb = DownloadProgressWidget(text="a")
@@ -72,10 +73,10 @@ def download_emit(myWin):
         origin_len = len(myWin.widgetlist)
 
         myWin.addProgress_sig.emit('download', 'Download ' + srcfile, filesize)
-        while (origin_len == len(myWin.widgetlist)):
+        while origin_len == len(myWin.widgetlist):
             pass
 
-        pb = myWin.widgetlist[len(myWin.widgetlist) - 1]
+        pb = myWin.widgetlist[len(myWin.widgetlist) - 1]  # 绑定FTP的下载函数，这个是句柄
 
         ftp_client.getFile(myWin.s, srcfile, dstfile, pb)
 
@@ -83,6 +84,7 @@ def download_emit(myWin):
         print('下载文件时失败', "noshow")
 
 
+# 绑定后端调用接口
 class MyMainGui(QWidget, Ui_Form):
     addProgress_sig = PyQt5.QtCore.pyqtSignal(str, str, int)
     remotrRefresh_sig = PyQt5.QtCore.pyqtSignal(int)
@@ -101,6 +103,7 @@ class MyMainGui(QWidget, Ui_Form):
         self.Local_Return.clicked.connect(self.cdToLocalBackDirectory)
         self.Local_Next.clicked.connect(self.cdToLocalNextDirectory)
         # self.Local_Upload.clicked.connect(lambda: Thread(target=self.upload).start())
+        self.passwdEdit.returnPressed.connect(self.connect)
         self.Local_Connect.clicked.connect(self.connect)
 
         # right mouse button menu
@@ -140,15 +143,20 @@ class MyMainGui(QWidget, Ui_Form):
         self.remotrRefresh_sig.connect(self.remoteRefresh)
 
     def _set_current_item(self, list_type, filename):
-
+        """
+        重新建立当前文件夹，包括远程或者本机
+        """
         file_list = self.Local_Filelist if list_type == 'local' else self.Remote_Filelist
         total_file = file_list.topLevelItemCount()
         for i in range(total_file):
-            if (file_list.topLevelItem(i).text(0) == filename):
+            if file_list.topLevelItem(i).text(0) == filename:
                 file_list.setCurrentItem(file_list.topLevelItem(i))
                 break
 
     def local_right_menu(self, pos):
+        """
+        本地主机右键菜单操作
+        """
         if self.local_op is False:
             return
 
@@ -167,7 +175,7 @@ class MyMainGui(QWidget, Ui_Form):
 
         # refresh
         if action == refresh:
-            self.updateLocalFileList()
+            self.updateLocalFileList()  # 刷新本地列表
             return
 
         # mkdir
@@ -179,24 +187,24 @@ class MyMainGui(QWidget, Ui_Form):
                 # os.mkdir(os.path.join(self.local_pwd, dir_name[0]))
                 os.mkdir(self.local_pwd + './' + dir_name[0])
                 self.updateLocalFileList()
-                self._set_current_item('local', dir_name[0])
+                self._set_current_item('local', dir_name[0])  # 切换新创建的目录
 
             except FileExistsError:
                 message = QMessageBox.information(self, '文件夹已存在', '文件夹名称已存在，请修改文件名称后再创建')
 
-        # remove 
+        # remove
         elif action == remove:
 
             topCount = self.Local_Filelist.topLevelItemCount()
             for i in range(topCount):
                 item_chosen = self.Local_Filelist.topLevelItem(i)
-                if (item_chosen == item):
+                if item_chosen == item:
                     break
 
             import shutil
             pathname = os.path.join(self.local_pwd, str(item.text(0)))
             # pathname = pathname.replace('\\', '/')
-            if (os.path.isdir(pathname)):
+            if os.path.isdir(pathname):
                 shutil.rmtree(pathname)
             else:
                 os.remove(pathname)
@@ -252,20 +260,24 @@ class MyMainGui(QWidget, Ui_Form):
         mkdir = menu.addAction("新建文件夹")
 
         action = menu.exec_(self.Remote_Filelist.mapToGlobal(pos))
+        print("action")
+        print(action == mkdir)
+        print(item)
 
         try:
             if action == refresh:
                 self.updateRemoteFileList()
                 return
 
-            elif item.text(3) == "文件" and action == download:
-                self.download()
-            elif item.text(3) == "文件" and action == removefile:
-                self.removeFile()
+            elif item is not None:
+                if item.text(3) == "文件" and action == download:
+                    self.download()
+                elif item.text(3) == "文件" and action == removefile:
+                    self.removeFile()
+                elif action == removedir:
+                    self.removeDIR()
             elif action == mkdir:
                 self.makeDIR()
-            elif action == removedir:
-                self.removeDIR()
             else:
                 pass
         except:
@@ -337,11 +349,11 @@ class MyMainGui(QWidget, Ui_Form):
 
     def downloadToRemoteFileList(self):
         """
-        download file and directory list from FTP Server
+        下载远程文件列表的信息
         """
         self.remoteWordList = []
         self.remoteDir = {}
-        content = ftp_client.listDir(self.s)
+        content = ftp_client.listDir(self.s)  # 返回获取的文件列表
         files = content.split("\r\n")
         for singel in files:
             if singel:
@@ -349,6 +361,9 @@ class MyMainGui(QWidget, Ui_Form):
         self.Remote_completerModel.setStringList(self.remoteWordList)
 
     def addItemToRemoteFileList(self, content):
+        """
+        将剪切好的文件列表加入到显示窗口
+        """
         mode, num, owner, group, size, date, filename = self.parseFileInfo(content)
         filetype = "文件"
         if content.startswith('d'):
@@ -384,7 +399,7 @@ class MyMainGui(QWidget, Ui_Form):
 
         if item[0] == 'folder' or item[0] == 'file':  # windows
             ftype, num, size, date, filename = (item[0], item[1], item[2], ' '.join(item[3:6]), ' '.join(item[6:]))
-            return (ftype, num, size, date, filename)
+            return ftype, num, size, date, filename
 
         else:  # linux
             while len(item) < 8:
@@ -393,7 +408,7 @@ class MyMainGui(QWidget, Ui_Form):
                 item[0], item[1], item[2], item[3], item[4], ' '.join(item[5:8]), ' '.join(item[8:]))
             if filename.replace(" ", "") == "":
                 filename = ".."
-            return (mode, num, owner, group, size, date, filename)
+            return mode, num, owner, group, size, date, filename
 
     def loadToLocaFileList(self):
         """
@@ -432,6 +447,7 @@ class MyMainGui(QWidget, Ui_Form):
             self.Local_Filelist.setEnabled(True)
 
     def cdToRemotePath(self):
+        # 转换远程主机的路径
         try:
             pathname = str(self.Remote_path.text().toUtf8())
         except AttributeError:
@@ -618,7 +634,7 @@ class MyMainGui(QWidget, Ui_Form):
 
     def addProgress(self, type, title, size):
         if type not in ['download', 'upload']:
-            raise ("发生下载上传错误")
+            raise "发生下载上传错误"
 
         if type == 'download':
             pb = DownloadProgressWidget(text=title)
@@ -671,17 +687,18 @@ class MyMainGui(QWidget, Ui_Form):
         except:
             message = QMessageBox.warning(self, '删除失败！', '无法删除当前文件')
 
+    # 创建目录
     def makeDIR(self):
         dir_name = QInputDialog.getText(self, '创建文件夹', '请输出文件夹名称', QLineEdit.Normal)
         if not dir_name[1]:
             return
-        dstdir = os.path.join(self.pwd, str(dir_name[0]))
+        dstdir = os.path.join(self.pwd, str(dir_name[0]))  # 拼接当前目录和创建的文件夹名称
         dstdir = dstdir.replace('\\', '/')
 
         try:
             ftp_client.makeDir(self.s, dstdir)
-            self.updateRemoteFileList()
-            self._set_current_item('remote', dir_name[0])
+            self.updateRemoteFileList()  # 更新远程主机的文件列表
+            self._set_current_item('remote', dir_name[0])  # 重新建立当前文件夹
         except:
             message = QMessageBox.warning(self, '删除失败！', '无法删除当前文件')
 
@@ -694,7 +711,6 @@ class ScannerGui(QWidget):
     def initUI(self):
         self.listwidget = QListWidget(self)  # 实例化列表控件
         self.listwidget.doubleClicked.connect(self.choose_ip)
-
 
         self.pbar = QProgressBar(self)
         self.pbar.setValue(0)
@@ -723,15 +739,15 @@ class ScannerGui(QWidget):
         self.listwidget.addItems(Scanner.ip_list)  # 添加项目-列表
 
     def choose_ip(self):
-        ip=self.listwidget.currentItem().text()
+        ip = self.listwidget.currentItem().text()
         self.hide()
         myWin.show()
         myWin.hostEdit.setText(ip)
 
+
 app = QApplication(sys.argv)
 myWin = MyMainGui()
 logger.setmyWin(myWin)
-app.setStyleSheet(qdarkstyle.load_stylesheet())
 
 sc = ScannerGui()
 sys.exit(app.exec_())

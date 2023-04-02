@@ -136,7 +136,7 @@ class Ui_Form(object):
 
 
         _translate = QtCore.QCoreApplication.translate
-        Form.setWindowTitle(_translate("Form", "局域网P2P文件传输"))
+        Form.setWindowTitle(_translate("Form", "FTP-Server"))
         self.Local_label.setText(_translate("Form", "本机"))
         self.Remote_label.setText(_translate("Form", "远程服务器"))
         self.downlabel.setText(_translate("Form", "下载/上传"))

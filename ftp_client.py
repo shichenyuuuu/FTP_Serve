@@ -23,6 +23,7 @@ def client(hostName, port):
 
     response = s.recv(MAX_BYTES)  # 接收响应
     if DEBUG:
+        put_text("连接建立")
         put_text(response)
     if response.decode()[:3] != "220":
         put_text("连接失败，请重试。", color="red")
@@ -36,16 +37,19 @@ def ftp_login(s, user, pwd):
     if DEBUG:
         user = user if user else 'test'
         pwd = pwd if pwd else '123456'
-    userParam = b"USER " + bytes(user.encode("utf-8")) + b"\n"
+    # b表示字节串对象，字符串需要使用encode转换为字节串对象
+    userParam = b"USER " + bytes(user.encode("utf-8")) + b"\n"  # 字节串序列，不是字符串
     pwdParam = b"PASS " + bytes(pwd.encode("utf-8")) + b"\n"
 
     s.send(userParam)
     response = s.recv(MAX_BYTES)
     if DEBUG:
+        put_text(userParam.decode("utf-8"))
         put_text(response)
     s.send(pwdParam)
     res = s.recv(MAX_BYTES)
     if DEBUG:
+        put_text(pwdParam.decode("utf-8"))
         put_text(res)
     if str(res[:3].decode("utf-8")) == "230":
         put_text("登陆成功。", color="green")
@@ -79,6 +83,7 @@ def listDir(s):
         if buffer == b"":
             break
         data += buffer
+    put_text((b"LIST *\r\n").decode("utf-8"))
     put_text(" Perms    Links Owner    Group        Size Date         Name")
     put_text(data.decode("utf-8"))
     all_info = data.decode("utf-8")
@@ -103,6 +108,7 @@ def changeWorkingDir(s, directory):
             break
         response = s.recv(MAX_BYTES)
         if DEBUG:
+            put_text((b"CWD " + bytes(directory.encode("utf-8")) + b"\r\n").decode("utf-8"))
             put_text(response)
         put_text("回复：{}".format(response.decode("utf-8")[3:len(response)]), color="yellow")
 
@@ -112,6 +118,7 @@ def makeDir(s, directory):
     put_text("输入指令 {}".format(str(b"MKD " + bytes(directory.encode("utf-8")) + b"\r\n")), color="blue")
     response = s.recv(MAX_BYTES)
     if DEBUG:
+        put_text((b"MKD " + bytes(directory.encode("utf-8")) + b"\r\n").decode("utf-8"))
         put_text(response)
     while response.decode()[:3] != "257":
         if response.decode()[:3] == "550":
@@ -127,6 +134,7 @@ def removeDir(s, directory):
     put_text("输入指令 {}".format(str(b"RMD " + bytes(directory.encode("utf-8")) + b"\r\n")), color="blue")
     response = s.recv(MAX_BYTES)
     if DEBUG:
+        put_text((b"RMD " + bytes(directory.encode("utf-8")) + b"\r\n").decode("utf-8"))
         put_text(response)
     while response.decode()[:3] != "250":
         if response.decode()[:3] == "550":
@@ -139,10 +147,15 @@ def removeDir(s, directory):
 
 # 下载文件
 def getFile(s, file, dstFile, pb):
+    '''
+    socket套接字
+    目标地址和下载地址
+    pb为绑定的组件
+    '''
     try:
-        s.send(b"PASV\r\n") # 被动模式
+        s.send(b"PASV\r\n")  # 被动模式
 
-        response = s.recv(MAX_BYTES)
+        response = s.recv(MAX_BYTES)  # b'227 Entering Passive Mode (222,199,216,173,214,38)\r\n'
         if DEBUG:
             put_text(response, "noshow")
         while response.decode()[:3] != "227":
@@ -151,27 +164,28 @@ def getFile(s, file, dstFile, pb):
                 put_text(response, "noshow")
             put_text("回复：{}".format(response.decode("utf-8")[3:len(response)]), "noshow")
 
-        data_response = re.search("\((.*?)\)", response.decode()).group(1)
+        data_response = re.search("\((.*?)\)", response.decode()).group(
+            1)  # 222,199,216,173,214,38 前4个数字是服务器的IP地址，后两个数字是数据端口号的高位和低位
         data_ip = ".".join(data_response.split(",")[0:4])
-        data_port = int(data_response.split(',')[4]) * 256 + int(data_response.split(',')[5])
-
+        data_port = int(data_response.split(',')[4]) * 256 + int(data_response.split(',')[5])  # 计算端口
         # 获取服务器返回的监听端口，并建立连接
         r = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         r.connect((data_ip, data_port))
 
-        s.send(b"RETR " + bytes(file.encode("utf-8")) + b"\r\n")
+        s.send(b"RETR " + bytes(file.encode("utf-8")) + b"\r\n")  # 文件下载指令
 
-        response = s.recv(MAX_BYTES)
+        response = s.recv(MAX_BYTES)  # b'150 Opening data channel for file download from server of data
         if DEBUG:
+            put_text((b"RETR " + bytes(file.encode("utf-8")) + b"\r\n").decode("utf-8"))
             put_text(response, "noshow")
         put_text("回复：{}".format(response.decode("utf-8")[3:len(response)]), "noshow")
 
         if response.decode()[:3] != "550":
             outputFile = str(dstFile)
 
-            output_file = open(outputFile, "wb")
+            output_file = open(outputFile, "wb")  # 打开写文件
             put_text("这将花费一段时间", "noshow")
-            while True:
+            while True:  # 获取服务器文件内容
                 buffer = r.recv(1024)
                 if buffer == b"":
                     break
@@ -192,6 +206,7 @@ def getFile(s, file, dstFile, pb):
 def getPwd(s):
     s.send(b"PWD\r\n")
     response = s.recv(MAX_BYTES)
+    put_text((b"PWD\r\n").decode("utf-8"))
     put_text(response)
     if response.decode()[:3] != "550":
         response = s.recv(MAX_BYTES)
@@ -201,14 +216,15 @@ def getPwd(s):
         work = text.split(" ", 2)
         pwd = work[0].replace('"', '')
         put_text("回复：{}".format(pwd), color="yellow")
-        return True, pwd[:-2]
+        print(pwd)
+        return True, pwd
     else:
         return False, "/"
 
 
-# 上传文件
+# 上传文件，与下载文件类似，
 def uploadFile(s, srcfile, dstfile, pb):
-    s.send(b"PASV\r\n")
+    s.send(b"PASV\r\n") # 控制连接
 
     response = s.recv(MAX_BYTES)
     put_text(response, "noshow")
@@ -222,17 +238,18 @@ def uploadFile(s, srcfile, dstfile, pb):
     data_ip = ".".join(data_response.split(",")[0:4])
     data_port = int(data_response.split(',')[4]) * 256 + int(data_response.split(',')[5])
 
-    r = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    r = socket.socket(socket.AF_INET, socket.SOCK_STREAM) # 建立数据链接
     r.connect((data_ip, data_port))
 
-    s.send(b"STOR " + bytes(dstfile.encode("utf-8")) + b"\r\n")
-
+    s.send(b"STOR " + bytes(dstfile.encode("utf-8")) + b"\r\n") # 上传文件
+    if DEBUG:
+        put_text((b"STOR " + bytes(dstfile.encode("utf-8")) + b"\r\n").decode("utf-8"))
     # Open the file and send it to server
     output_file = open(srcfile, "rb")
     while True:
         buffer = output_file.read(MAX_BYTES)
         r.sendall(buffer)
-        print(buffer)
+        # print(buffer)
         pb.updateProgress.emit(buffer)
         if buffer == b'':
             break
@@ -259,5 +276,7 @@ def deleteFile(s, file):
     r = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     r.connect((data_ip, data_port))
 
-    s.send(b"DELE " + bytes(file.encode("utf-8")) + b"\r\n")
+    s.send(b"DELE " + bytes(file.encode("utf-8")) + b"\r\n") # 删除文件
+    if DEBUG:
+        put_text((b"DELE " + bytes(file.encode("utf-8")) + b"\r\n").decode("utf-8"))
     put_text("文件已删除")
