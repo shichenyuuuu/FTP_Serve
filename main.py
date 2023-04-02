@@ -260,9 +260,6 @@ class MyMainGui(QWidget, Ui_Form):
         mkdir = menu.addAction("新建文件夹")
 
         action = menu.exec_(self.Remote_Filelist.mapToGlobal(pos))
-        print("action")
-        print(action == mkdir)
-        print(item)
 
         try:
             if action == refresh:
